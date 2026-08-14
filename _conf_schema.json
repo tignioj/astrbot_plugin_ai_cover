@@ -31,7 +31,7 @@
   "protect": {
     "description": "清辅音保护",
     "type": "float",
-    "default": 0.33,
+    "default": 0.25,
     "slider": {"min": 0, "max": 0.5, "step": 0.01}
   },
   "vocal_gain": {
