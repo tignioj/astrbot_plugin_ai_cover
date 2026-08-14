@@ -2,6 +2,8 @@
 
 这个插件把聊天平台收到的音频发给 Windows 上的 RVC 服务，按以下顺序处理：
 
+> 本仓库包含 AstrBot 前端插件，需要配合提供 `/health`、`/models` 和 `/cover` 接口的 RVC AI 翻唱服务使用。
+
 1. PyMSS `去伴奏`：得到人声和伴奏；
 2. PyMSS `去混响`：得到干净人声；
 3. RVC：使用 `assets/weights` 中指定的模型和 `logs` 中匹配的索引；
@@ -34,10 +36,10 @@ data/plugins/astrbot_plugin_ai_cover
 重启 AstrBot 或在插件管理页重载。插件默认访问：
 
 ```text
-http://192.168.100.143:18888
+http://127.0.0.1:18888
 ```
 
-若 Windows 地址改变，在 AstrBot 插件配置中修改 `service_url`。
+如果 AstrBot 运行在 Docker 中，或 RVC 服务位于另一台主机，请在插件配置中把 `service_url` 修改为 AstrBot 容器能够访问的地址。
 
 ## 指令
 

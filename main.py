@@ -53,7 +53,7 @@ class OriginalFormatRecord(Record):
 
 @register(
     "astrbot_plugin_ai_cover",
-    "Codex",
+    "tignioj",
     "调用局域网 RVC 服务完成分离、去混响、音色转换和混音",
     "1.1.2",
 )
@@ -62,7 +62,7 @@ class AICoverPlugin(Star):
         super().__init__(context)
         self.config = config
         self.service_url = str(
-            config.get("service_url", "http://192.168.100.143:18888")
+            config.get("service_url", "http://127.0.0.1:18888")
         ).rstrip("/")
         self.api_token = str(config.get("api_token", ""))
         self.timeout_seconds = max(60, int(config.get("timeout_seconds", 3600)))

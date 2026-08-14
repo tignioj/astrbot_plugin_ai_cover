@@ -2,8 +2,8 @@
   "service_url": {
     "description": "RVC AI 翻唱服务地址",
     "type": "string",
-    "default": "http://192.168.100.143:18888",
-    "hint": "AstrBot 宿主机必须能访问此地址。"
+    "default": "http://127.0.0.1:18888",
+    "hint": "请填写 AstrBot 宿主机或容器能够访问的 RVC 服务地址。"
   },
   "api_token": {
     "description": "服务鉴权令牌",
