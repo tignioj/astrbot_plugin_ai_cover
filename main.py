@@ -18,7 +18,6 @@ from astrbot.api.message_components import File, Plain, Record, Reply
 from astrbot.api.star import Context, Star, register
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 
-
 DEFAULT_FORM_VALUES = {
     "index_rate": 0.75,
     "rms_mix_rate": 0.25,
@@ -27,13 +26,14 @@ DEFAULT_FORM_VALUES = {
 DEFAULT_VOCAL_GAIN = 1.0
 DEFAULT_INSTRUMENTAL_GAIN = 1.0
 MAX_GAIN = 2.0
+PLUGIN_NAME = "astrbot_plugin_ai_cover"
 
 
 class OriginalFormatRecord(Record):
     """A Record that preserves the source audio instead of converting it to WAV."""
 
     @staticmethod
-    def fromFileSystem(path: str | Path, **kwargs) -> "OriginalFormatRecord":
+    def fromFileSystem(path: str | Path, **kwargs) -> OriginalFormatRecord:
         file_path = Path(path).resolve(strict=False)
         return OriginalFormatRecord(
             file=file_path.as_uri(),
@@ -55,7 +55,7 @@ class OriginalFormatRecord(Record):
     "astrbot_plugin_ai_cover",
     "tignioj",
     "调用局域网 RVC 服务完成分离、去混响、音色转换和混音",
-    "1.1.2",
+    "1.2.0",
 )
 class AICoverPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -69,22 +69,56 @@ class AICoverPlugin(Star):
         self.data_dir = Path(get_astrbot_plugin_data_path()) / "astrbot_plugin_ai_cover"
         self.output_dir = self.data_dir / "outputs"
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        context.register_web_api(
+            f"/{PLUGIN_NAME}/cache",
+            self.page_cache_status,
+            ["GET"],
+            "AI cover separation cache status",
+        )
+        context.register_web_api(
+            f"/{PLUGIN_NAME}/cache/clear",
+            self.page_clear_cache,
+            ["POST"],
+            "Clear AI cover separation cache",
+        )
 
     def _headers(self) -> dict[str, str]:
         return {"X-AI-Cover-Token": self.api_token} if self.api_token else {}
 
-    async def _get_json(self, path: str) -> dict:
+    async def _service_json(self, path: str, method: str = "GET") -> dict:
         timeout = aiohttp.ClientTimeout(total=30)
         async with (
             aiohttp.ClientSession(timeout=timeout, trust_env=True) as session,
-            session.get(
-                f"{self.service_url}{path}", headers=self._headers()
+            session.request(
+                method, f"{self.service_url}{path}", headers=self._headers()
             ) as response,
         ):
             payload = await response.text()
             if response.status != 200:
                 raise RuntimeError(self._error_detail(payload, response.status))
             return json.loads(payload)
+
+    async def _get_json(self, path: str) -> dict:
+        return await self._service_json(path)
+
+    async def page_cache_status(self):
+        """Expose service cache statistics to the plugin management page."""
+        try:
+            payload = await self._service_json("/cache")
+            return payload.get("cache", {})
+        except Exception as error:  # noqa: BLE001 - Web API boundary
+            return {"status": "error", "message": str(error)}, 502
+
+    async def page_clear_cache(self):
+        """Clear the service-side cache from the plugin management page."""
+        try:
+            payload = await self._service_json("/cache", "DELETE")
+            return {
+                "removed": payload.get("removed", {}),
+                "cache": payload.get("cache", {}),
+            }
+        except Exception as error:  # noqa: BLE001 - Web API boundary
+            return {"status": "error", "message": str(error)}, 502
 
     @staticmethod
     def _error_detail(payload: str, status: int) -> str:
@@ -145,9 +179,7 @@ class AICoverPlugin(Star):
             ),
             "伴奏音量": (
                 instrumental_gain,
-                self._configured_gain(
-                    "instrumental_gain", DEFAULT_INSTRUMENTAL_GAIN
-                ),
+                self._configured_gain("instrumental_gain", DEFAULT_INSTRUMENTAL_GAIN),
             ),
         }
         resolved: list[float] = []
@@ -166,7 +198,7 @@ class AICoverPlugin(Star):
         transpose: int,
         vocal_gain: float,
         instrumental_gain: float,
-    ) -> tuple[Path, str, str]:
+    ) -> tuple[Path, str, str, bool]:
         timeout = aiohttp.ClientTimeout(
             total=self.timeout_seconds,
             connect=30,
@@ -210,7 +242,8 @@ class AICoverPlugin(Star):
                     raise RuntimeError("RVC 服务返回了空音频")
                 actual_model = unquote(response.headers.get("X-AI-Cover-Model", model))
                 index = unquote(response.headers.get("X-AI-Cover-Index", ""))
-                return output, actual_model, index
+                cache_hit = response.headers.get("X-AI-Cover-Cache") == "hit"
+                return output, actual_model, index, cache_hit
         except Exception:
             output.unlink(missing_ok=True)
             raise
@@ -274,7 +307,7 @@ class AICoverPlugin(Star):
         )
         try:
             await asyncio.to_thread(self._cleanup_outputs_sync)
-            output, actual_model, index = await self._request_cover(
+            output, actual_model, index, cache_hit = await self._request_cover(
                 audio_path,
                 original_name,
                 model,
@@ -288,6 +321,8 @@ class AICoverPlugin(Star):
             )
             if index:
                 summary += f"，索引 {index}"
+            if cache_hit:
+                summary += "，已复用分离缓存"
             if bool(self.config.get("send_as_record", False)):
                 chain = [
                     Plain(summary),

@@ -1,0 +1,8 @@
+{
+  "pages": {
+    "cache": {
+      "title": "分离缓存",
+      "description": "查看并清理 AI 翻唱的人声与伴奏缓存"
+    }
+  }
+}

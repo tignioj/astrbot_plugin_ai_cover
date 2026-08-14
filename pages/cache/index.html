@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>分离缓存</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <div>
+        <p class="eyebrow">AI 翻唱</p>
+        <h1>分离缓存</h1>
+        <p class="description">
+          相同文件会复用已经生成的干人声和伴奏，跳过两次音轨分离。
+        </p>
+      </div>
+      <section class="stats" aria-live="polite">
+        <div class="stat">
+          <span class="label">缓存音乐</span>
+          <strong id="entries">—</strong>
+          <span class="unit">首</span>
+        </div>
+        <div class="stat">
+          <span class="label">占用空间</span>
+          <strong id="size">—</strong>
+        </div>
+      </section>
+      <div class="actions">
+        <button id="refresh" class="secondary" type="button">刷新</button>
+        <button id="clear" class="danger" type="button">清理全部缓存</button>
+      </div>
+      <p id="message" class="message" role="status"></p>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
