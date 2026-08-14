@@ -16,6 +16,12 @@
     "type": "int",
     "default": 3600
   },
+  "default_model": {
+    "description": "默认翻唱模型",
+    "type": "string",
+    "default": "芙宁娜",
+    "hint": "发送 /翻唱 或 /翻唱下载 时未指定模型，就使用这里的模型名称。"
+  },
   "index_rate": {
     "description": "RVC 特征索引占比",
     "type": "float",

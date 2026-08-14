@@ -25,6 +25,7 @@ DEFAULT_FORM_VALUES = {
 }
 DEFAULT_VOCAL_GAIN = 1.0
 DEFAULT_INSTRUMENTAL_GAIN = 1.0
+DEFAULT_MODEL = "芙宁娜"
 MAX_GAIN = 2.0
 PLUGIN_NAME = "astrbot_plugin_ai_cover"
 
@@ -55,7 +56,7 @@ class OriginalFormatRecord(Record):
     "astrbot_plugin_ai_cover",
     "tignioj",
     "调用局域网 RVC 服务完成分离、去混响、音色转换和混音",
-    "1.2.0",
+    "1.3.0",
 )
 class AICoverPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -167,6 +168,12 @@ class AICoverPlugin(Star):
             return default
         return gain if math.isfinite(gain) and 0.0 <= gain <= MAX_GAIN else default
 
+    def _configured_model(self) -> str:
+        """Return a non-empty default model for commands that omit it."""
+        configured = self.config.get("default_model", DEFAULT_MODEL)
+        model = str(configured or "").strip()
+        return model or DEFAULT_MODEL
+
     def _resolve_gains(
         self,
         vocal_gain: float,
@@ -264,23 +271,25 @@ class AICoverPlugin(Star):
                 marker = "✓索引" if row.get("has_index") else "无索引"
                 lines.append(f"- {row['name']}（{marker}）")
             lines.append(
-                "\n用法：/翻唱 模型名 [升降调] [人声音量] [伴奏音量]，"
+                f"\n默认模型：{self._configured_model()}\n"
+                "用法：/翻唱 [模型名] [升降调] [人声音量] [伴奏音量]，"
                 "并附带或回复音频。"
             )
             yield event.plain_result("\n".join(lines))
         except Exception as error:  # noqa: BLE001 - command boundary reports failures
             yield event.plain_result(f"获取翻唱模型失败：{error}")
 
-    @filter.command("翻唱")
-    async def cover(
+    async def _run_cover(
         self,
         event: AstrMessageEvent,
         model: str,
-        transpose: int = 0,
-        vocal_gain: float = -1.0,
-        instrumental_gain: float = -1.0,
+        transpose: int,
+        vocal_gain: float,
+        instrumental_gain: float,
+        force_file: bool,
     ):
-        """制作 AI 翻唱。示例：/翻唱 胡桃 0 1.1 0.8。"""
+        """Run one cover job and optionally force MP3 file delivery."""
+        model = model.strip() or self._configured_model()
         if not -24 <= transpose <= 24:
             yield event.plain_result("升降调必须在 -24 到 24 之间。")
             return
@@ -323,7 +332,7 @@ class AICoverPlugin(Star):
                 summary += f"，索引 {index}"
             if cache_hit:
                 summary += "，已复用分离缓存"
-            if bool(self.config.get("send_as_record", False)):
+            if not force_file and bool(self.config.get("send_as_record", False)):
                 chain = [
                     Plain(summary),
                     OriginalFormatRecord.fromFileSystem(output),
@@ -340,6 +349,46 @@ class AICoverPlugin(Star):
             )
         except Exception as error:  # noqa: BLE001 - keep one failed job from crashing plugin
             yield event.plain_result(f"AI 翻唱失败：{error}")
+
+    @filter.command("翻唱")
+    async def cover(
+        self,
+        event: AstrMessageEvent,
+        model: str = "",
+        transpose: int = 0,
+        vocal_gain: float = -1.0,
+        instrumental_gain: float = -1.0,
+    ):
+        """制作 AI 翻唱，省略模型时使用插件配置的默认模型。"""
+        async for result in self._run_cover(
+            event,
+            model,
+            transpose,
+            vocal_gain,
+            instrumental_gain,
+            force_file=False,
+        ):
+            yield result
+
+    @filter.command("翻唱下载")
+    async def cover_download(
+        self,
+        event: AstrMessageEvent,
+        model: str = "",
+        transpose: int = 0,
+        vocal_gain: float = -1.0,
+        instrumental_gain: float = -1.0,
+    ):
+        """制作 AI 翻唱并始终发送 MP3 文件。"""
+        async for result in self._run_cover(
+            event,
+            model,
+            transpose,
+            vocal_gain,
+            instrumental_gain,
+            force_file=True,
+        ):
+            yield result
 
     @filter.command("翻唱状态")
     async def cover_status(self, event: AstrMessageEvent):
