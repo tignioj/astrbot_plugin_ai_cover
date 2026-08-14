@@ -277,8 +277,8 @@ class AICoverPlugin(Star):
         event: AstrMessageEvent,
         model: str,
         transpose: int = 0,
-        vocal_gain: float = -1,
-        instrumental_gain: float = -1,
+        vocal_gain: float = -1.0,
+        instrumental_gain: float = -1.0,
     ):
         """制作 AI 翻唱。示例：/翻唱 胡桃 0 1.1 0.8。"""
         if not -24 <= transpose <= 24:
