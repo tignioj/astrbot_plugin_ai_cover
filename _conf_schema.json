@@ -1,0 +1,60 @@
+{
+  "service_url": {
+    "description": "RVC AI 翻唱服务地址",
+    "type": "string",
+    "default": "http://192.168.100.143:18888",
+    "hint": "AstrBot 宿主机必须能访问此地址。"
+  },
+  "api_token": {
+    "description": "服务鉴权令牌",
+    "type": "string",
+    "default": "",
+    "hint": "需要与 Windows 环境变量 AI_COVER_API_TOKEN 一致；留空表示仅依赖局域网隔离。"
+  },
+  "timeout_seconds": {
+    "description": "单次翻唱超时秒数",
+    "type": "int",
+    "default": 3600
+  },
+  "index_rate": {
+    "description": "RVC 特征索引占比",
+    "type": "float",
+    "default": 0.75,
+    "slider": {"min": 0, "max": 1, "step": 0.05}
+  },
+  "rms_mix_rate": {
+    "description": "输入与输出包络融合比例",
+    "type": "float",
+    "default": 0.25,
+    "slider": {"min": 0, "max": 1, "step": 0.05}
+  },
+  "protect": {
+    "description": "清辅音保护",
+    "type": "float",
+    "default": 0.33,
+    "slider": {"min": 0, "max": 0.5, "step": 0.01}
+  },
+  "vocal_gain": {
+    "description": "翻唱人声音量",
+    "type": "float",
+    "default": 1.0,
+    "slider": {"min": 0, "max": 2, "step": 0.05}
+  },
+  "instrumental_gain": {
+    "description": "伴奏音量",
+    "type": "float",
+    "default": 1.0,
+    "slider": {"min": 0, "max": 2, "step": 0.05}
+  },
+  "send_as_record": {
+    "description": "以语音消息而非文件发送结果",
+    "type": "bool",
+    "default": false,
+    "hint": "长音频建议保持关闭，以文件形式发送兼容性更好。"
+  },
+  "output_retention_hours": {
+    "description": "AstrBot 结果文件保留小时数",
+    "type": "int",
+    "default": 24
+  }
+}
