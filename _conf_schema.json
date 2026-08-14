@@ -35,22 +35,24 @@
     "slider": {"min": 0, "max": 0.5, "step": 0.01}
   },
   "vocal_gain": {
-    "description": "翻唱人声音量",
+    "description": "默认翻唱人声音量倍率",
     "type": "float",
     "default": 1.0,
-    "slider": {"min": 0, "max": 2, "step": 0.05}
+    "slider": {"min": 0, "max": 2, "step": 0.05},
+    "hint": "1.0 为原音量，0 为静音，2.0 为两倍；命令中传入音量时会临时覆盖此值。"
   },
   "instrumental_gain": {
-    "description": "伴奏音量",
+    "description": "默认伴奏音量倍率",
     "type": "float",
     "default": 1.0,
-    "slider": {"min": 0, "max": 2, "step": 0.05}
+    "slider": {"min": 0, "max": 2, "step": 0.05},
+    "hint": "1.0 为原音量，0 为静音，2.0 为两倍；命令中传入音量时会临时覆盖此值。"
   },
   "send_as_record": {
-    "description": "以语音消息而非文件发送结果",
+    "description": "将结果作为语音消息发送",
     "type": "bool",
     "default": false,
-    "hint": "长音频建议保持关闭，以文件形式发送兼容性更好。"
+    "hint": "关闭时发送 MP3 文件；开启时发送平台语音消息。插件会保留 MP3 格式交给消息适配器，避免在 AstrBot 中转为体积更大的 WAV；平台仍可能再次转码或限制超长音频。"
   },
   "output_retention_hours": {
     "description": "AstrBot 结果文件保留小时数",

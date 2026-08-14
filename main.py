@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
+import math
 import time
 import uuid
 from pathlib import Path
@@ -17,11 +19,43 @@ from astrbot.api.star import Context, Star, register
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 
 
+DEFAULT_FORM_VALUES = {
+    "index_rate": 0.75,
+    "rms_mix_rate": 0.25,
+    "protect": 0.25,
+}
+DEFAULT_VOCAL_GAIN = 1.0
+DEFAULT_INSTRUMENTAL_GAIN = 1.0
+MAX_GAIN = 2.0
+
+
+class OriginalFormatRecord(Record):
+    """A Record that preserves the source audio instead of converting it to WAV."""
+
+    @staticmethod
+    def fromFileSystem(path: str | Path, **kwargs) -> "OriginalFormatRecord":
+        file_path = Path(path).resolve(strict=False)
+        return OriginalFormatRecord(
+            file=file_path.as_uri(),
+            path=str(file_path),
+            **kwargs,
+        )
+
+    async def convert_to_base64(self) -> str:
+        if not self.path:
+            return await super().convert_to_base64()
+
+        def encode_file() -> str:
+            return base64.b64encode(Path(self.path).read_bytes()).decode("ascii")
+
+        return await asyncio.to_thread(encode_file)
+
+
 @register(
     "astrbot_plugin_ai_cover",
     "Codex",
     "调用局域网 RVC 服务完成分离、去混响、音色转换和混音",
-    "1.0.0",
+    "1.1.2",
 )
 class AICoverPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -91,12 +125,47 @@ class AICoverPlugin(Star):
             except OSError:
                 continue
 
+    def _configured_gain(self, key: str, default: float) -> float:
+        """Read a gain safely so configs created before v1.1 still work."""
+        try:
+            gain = float(self.config.get(key, default))
+        except (TypeError, ValueError):
+            return default
+        return gain if math.isfinite(gain) and 0.0 <= gain <= MAX_GAIN else default
+
+    def _resolve_gains(
+        self,
+        vocal_gain: float,
+        instrumental_gain: float,
+    ) -> tuple[float, float]:
+        gains = {
+            "人声音量": (
+                vocal_gain,
+                self._configured_gain("vocal_gain", DEFAULT_VOCAL_GAIN),
+            ),
+            "伴奏音量": (
+                instrumental_gain,
+                self._configured_gain(
+                    "instrumental_gain", DEFAULT_INSTRUMENTAL_GAIN
+                ),
+            ),
+        }
+        resolved: list[float] = []
+        for label, (requested, configured) in gains.items():
+            gain = configured if requested == -1 else requested
+            if not math.isfinite(gain) or not 0.0 <= gain <= MAX_GAIN:
+                raise ValueError(f"{label}必须在 0 到 {MAX_GAIN:g} 之间。")
+            resolved.append(gain)
+        return resolved[0], resolved[1]
+
     async def _request_cover(
         self,
         audio_path: str,
         original_name: str,
         model: str,
         transpose: int,
+        vocal_gain: float,
+        instrumental_gain: float,
     ) -> tuple[Path, str, str]:
         timeout = aiohttp.ClientTimeout(
             total=self.timeout_seconds,
@@ -113,14 +182,10 @@ class AICoverPlugin(Star):
         )
         form.add_field("model", model)
         form.add_field("transpose", str(transpose))
-        for key in (
-            "index_rate",
-            "rms_mix_rate",
-            "protect",
-            "vocal_gain",
-            "instrumental_gain",
-        ):
-            form.add_field(key, str(self.config.get(key)))
+        for key, default in DEFAULT_FORM_VALUES.items():
+            form.add_field(key, str(self.config.get(key, default)))
+        form.add_field("vocal_gain", str(vocal_gain))
+        form.add_field("instrumental_gain", str(instrumental_gain))
 
         output = self.output_dir / f"ai_cover_{uuid.uuid4().hex}.mp3"
         try:
@@ -165,7 +230,10 @@ class AICoverPlugin(Star):
             for row in rows:
                 marker = "✓索引" if row.get("has_index") else "无索引"
                 lines.append(f"- {row['name']}（{marker}）")
-            lines.append("\n用法：/翻唱 模型名 [升降调]，并附带或回复音频。")
+            lines.append(
+                "\n用法：/翻唱 模型名 [升降调] [人声音量] [伴奏音量]，"
+                "并附带或回复音频。"
+            )
             yield event.plain_result("\n".join(lines))
         except Exception as error:  # noqa: BLE001 - command boundary reports failures
             yield event.plain_result(f"获取翻唱模型失败：{error}")
@@ -176,10 +244,20 @@ class AICoverPlugin(Star):
         event: AstrMessageEvent,
         model: str,
         transpose: int = 0,
+        vocal_gain: float = -1,
+        instrumental_gain: float = -1,
     ):
-        """制作 AI 翻唱。示例：/翻唱 胡桃 0。"""
+        """制作 AI 翻唱。示例：/翻唱 胡桃 0 1.1 0.8。"""
         if not -24 <= transpose <= 24:
             yield event.plain_result("升降调必须在 -24 到 24 之间。")
+            return
+        try:
+            vocal_gain, instrumental_gain = self._resolve_gains(
+                vocal_gain,
+                instrumental_gain,
+            )
+        except ValueError as error:
+            yield event.plain_result(str(error))
             return
         try:
             audio_path, original_name = await self._find_audio(event)
@@ -190,6 +268,7 @@ class AICoverPlugin(Star):
         await event.send(
             event.plain_result(
                 f"已接收音频，开始制作 AI 翻唱：{model}（升降调 {transpose}）。\n"
+                f"人声音量 {vocal_gain:.2f} 倍，伴奏音量 {instrumental_gain:.2f} 倍。\n"
                 "将依次执行人声分离、去混响、RVC 转换和混音，请耐心等待。"
             )
         )
@@ -200,12 +279,20 @@ class AICoverPlugin(Star):
                 original_name,
                 model,
                 transpose,
+                vocal_gain,
+                instrumental_gain,
             )
-            summary = f"AI 翻唱完成：{actual_model}，升降调 {transpose}"
+            summary = (
+                f"AI 翻唱完成：{actual_model}，升降调 {transpose}，"
+                f"人声 {vocal_gain:.2f} 倍，伴奏 {instrumental_gain:.2f} 倍"
+            )
             if index:
                 summary += f"，索引 {index}"
             if bool(self.config.get("send_as_record", False)):
-                chain = [Plain(summary), Record.fromFileSystem(str(output))]
+                chain = [
+                    Plain(summary),
+                    OriginalFormatRecord.fromFileSystem(output),
+                ]
             else:
                 chain = [
                     Plain(summary),
