@@ -29,6 +29,8 @@ DEFAULT_VOCAL_GAIN = 1.0
 DEFAULT_INSTRUMENTAL_GAIN = 1.0
 DEFAULT_MODEL = "芙宁娜"
 MAX_GAIN = 2.0
+MIN_SPEED = 0.5
+MAX_SPEED = 2.0
 PLUGIN_NAME = "astrbot_plugin_ai_cover"
 INVALID_FILENAME_CHARS = re.compile(r'[\x00-\x1f<>:"/\\|?*]+')
 
@@ -74,7 +76,7 @@ class OriginalFormatRecord(Record):
     "astrbot_plugin_ai_cover",
     "tignioj",
     "调用局域网 RVC 服务完成分离、去混响、音色转换和混音",
-    "1.5.0",
+    "1.6.0",
 )
 class AICoverPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -257,6 +259,7 @@ class AICoverPlugin(Star):
         instrumental_transpose: int,
         vocal_gain: float,
         instrumental_gain: float,
+        speed: float,
     ) -> tuple[Path, str, str, bool]:
         timeout = aiohttp.ClientTimeout(
             total=self.timeout_seconds,
@@ -278,6 +281,7 @@ class AICoverPlugin(Star):
             form.add_field(key, str(self.config.get(key, default)))
         form.add_field("vocal_gain", str(vocal_gain))
         form.add_field("instrumental_gain", str(instrumental_gain))
+        form.add_field("speed", str(speed))
 
         output = self.output_dir / f"ai_cover_{uuid.uuid4().hex}.mp3"
         try:
@@ -302,6 +306,17 @@ class AICoverPlugin(Star):
                 ):
                     raise RuntimeError(
                         "当前 RVC 服务不支持 BGM 变调，请先更新并重启后端服务。"
+                    )
+                applied_speed = response.headers.get("X-AI-Cover-Speed")
+                try:
+                    speed_supported = math.isclose(
+                        float(applied_speed), speed, rel_tol=0.0, abs_tol=1e-9
+                    )
+                except (TypeError, ValueError):
+                    speed_supported = False
+                if speed != 1.0 and not speed_supported:
+                    raise RuntimeError(
+                        "当前 RVC 服务不支持变速，请先更新并重启后端服务。"
                     )
                 target = await asyncio.to_thread(output.open, "wb")
                 try:
@@ -337,7 +352,7 @@ class AICoverPlugin(Star):
             lines.append(
                 f"\n默认模型：{self._configured_model()}\n"
                 "用法：/翻唱 [模型名] [人声变调] [BGM变调] "
-                "[人声音量] [背景音乐音量]，"
+                "[人声音量] [背景音乐音量] [变速]，"
                 "并附带或回复音频。"
             )
             yield event.plain_result("\n".join(lines))
@@ -352,6 +367,7 @@ class AICoverPlugin(Star):
         instrumental_transpose: int,
         vocal_gain: float,
         instrumental_gain: float,
+        speed: float,
         force_file: bool,
     ):
         """Run one cover job and optionally force MP3 file delivery."""
@@ -361,6 +377,11 @@ class AICoverPlugin(Star):
             return
         if not -24 <= instrumental_transpose <= 24:
             yield event.plain_result("BGM 变调必须在 -24 到 24 之间。")
+            return
+        if not math.isfinite(speed) or not MIN_SPEED <= speed <= MAX_SPEED:
+            yield event.plain_result(
+                f"变速必须在 {MIN_SPEED:g} 到 {MAX_SPEED:g} 之间，1 为原速。"
+            )
             return
         try:
             vocal_gain, instrumental_gain = self._resolve_gains(
@@ -381,7 +402,7 @@ class AICoverPlugin(Star):
                 f"已接收音频，开始制作 AI 翻唱：{model}。\n"
                 f"人声变调 {vocal_transpose}，BGM 变调 {instrumental_transpose}；"
                 f"人声音量 {vocal_gain:.2f} 倍，背景音乐音量 "
-                f"{instrumental_gain:.2f} 倍。\n"
+                f"{instrumental_gain:.2f} 倍，速度 {speed:.2f} 倍。\n"
                 "将依次执行人声分离、去混响、RVC 转换和混音，请耐心等待。"
             )
         )
@@ -395,11 +416,12 @@ class AICoverPlugin(Star):
                 instrumental_transpose,
                 vocal_gain,
                 instrumental_gain,
+                speed,
             )
             summary = (
                 f"AI 翻唱完成：{actual_model}，人声变调 {vocal_transpose}，"
                 f"BGM 变调 {instrumental_transpose}，人声 {vocal_gain:.2f} 倍，"
-                f"背景音乐 {instrumental_gain:.2f} 倍"
+                f"背景音乐 {instrumental_gain:.2f} 倍，速度 {speed:.2f} 倍"
             )
             if index:
                 summary += f"，索引 {index}"
@@ -435,6 +457,7 @@ class AICoverPlugin(Star):
         instrumental_transpose: int = 0,
         vocal_gain: float = -1.0,
         instrumental_gain: float = -1.0,
+        speed: float = 1.0,
     ):
         """制作 AI 翻唱，省略模型时使用插件配置的默认模型。"""
         async for result in self._run_cover(
@@ -444,6 +467,7 @@ class AICoverPlugin(Star):
             instrumental_transpose,
             vocal_gain,
             instrumental_gain,
+            speed,
             force_file=False,
         ):
             yield result
@@ -457,6 +481,7 @@ class AICoverPlugin(Star):
         instrumental_transpose: int = 0,
         vocal_gain: float = -1.0,
         instrumental_gain: float = -1.0,
+        speed: float = 1.0,
     ):
         """制作 AI 翻唱并始终发送 MP3 文件。"""
         async for result in self._run_cover(
@@ -466,6 +491,7 @@ class AICoverPlugin(Star):
             instrumental_transpose,
             vocal_gain,
             instrumental_gain,
+            speed,
             force_file=True,
         ):
             yield result
