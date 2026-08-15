@@ -73,7 +73,7 @@ class OriginalFormatRecord(Record):
     "astrbot_plugin_ai_cover",
     "tignioj",
     "调用局域网 RVC 服务完成分离、去混响、音色转换和混音",
-    "1.3.1",
+    "1.4.0",
 )
 class AICoverPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -219,7 +219,8 @@ class AICoverPlugin(Star):
         audio_path: str,
         original_name: str,
         model: str,
-        transpose: int,
+        vocal_transpose: int,
+        instrumental_transpose: int,
         vocal_gain: float,
         instrumental_gain: float,
     ) -> tuple[Path, str, str, bool]:
@@ -237,7 +238,8 @@ class AICoverPlugin(Star):
             content_type="application/octet-stream",
         )
         form.add_field("model", model)
-        form.add_field("transpose", str(transpose))
+        form.add_field("transpose", str(vocal_transpose))
+        form.add_field("instrumental_transpose", str(instrumental_transpose))
         for key, default in DEFAULT_FORM_VALUES.items():
             form.add_field(key, str(self.config.get(key, default)))
         form.add_field("vocal_gain", str(vocal_gain))
@@ -256,6 +258,17 @@ class AICoverPlugin(Star):
                 if response.status != 200:
                     payload = await response.text()
                     raise RuntimeError(self._error_detail(payload, response.status))
+                applied_instrumental_transpose = response.headers.get(
+                    "X-AI-Cover-Instrumental-Transpose"
+                )
+                if (
+                    instrumental_transpose != 0
+                    and applied_instrumental_transpose
+                    != str(instrumental_transpose)
+                ):
+                    raise RuntimeError(
+                        "当前 RVC 服务不支持 BGM 变调，请先更新并重启后端服务。"
+                    )
                 target = await asyncio.to_thread(output.open, "wb")
                 try:
                     async for chunk in response.content.iter_chunked(1024 * 1024):
@@ -289,7 +302,8 @@ class AICoverPlugin(Star):
                 lines.append(f"- {row['name']}（{marker}）")
             lines.append(
                 f"\n默认模型：{self._configured_model()}\n"
-                "用法：/翻唱 [模型名] [升降调] [人声音量] [伴奏音量]，"
+                "用法：/翻唱 [模型名] [人声变调] [BGM变调] "
+                "[人声音量] [背景音乐音量]，"
                 "并附带或回复音频。"
             )
             yield event.plain_result("\n".join(lines))
@@ -300,15 +314,19 @@ class AICoverPlugin(Star):
         self,
         event: AstrMessageEvent,
         model: str,
-        transpose: int,
+        vocal_transpose: int,
+        instrumental_transpose: int,
         vocal_gain: float,
         instrumental_gain: float,
         force_file: bool,
     ):
         """Run one cover job and optionally force MP3 file delivery."""
         model = model.strip() or self._configured_model()
-        if not -24 <= transpose <= 24:
-            yield event.plain_result("升降调必须在 -24 到 24 之间。")
+        if not -24 <= vocal_transpose <= 24:
+            yield event.plain_result("人声变调必须在 -24 到 24 之间。")
+            return
+        if not -24 <= instrumental_transpose <= 24:
+            yield event.plain_result("BGM 变调必须在 -24 到 24 之间。")
             return
         try:
             vocal_gain, instrumental_gain = self._resolve_gains(
@@ -326,8 +344,10 @@ class AICoverPlugin(Star):
 
         await event.send(
             event.plain_result(
-                f"已接收音频，开始制作 AI 翻唱：{model}（升降调 {transpose}）。\n"
-                f"人声音量 {vocal_gain:.2f} 倍，伴奏音量 {instrumental_gain:.2f} 倍。\n"
+                f"已接收音频，开始制作 AI 翻唱：{model}。\n"
+                f"人声变调 {vocal_transpose}，BGM 变调 {instrumental_transpose}；"
+                f"人声音量 {vocal_gain:.2f} 倍，背景音乐音量 "
+                f"{instrumental_gain:.2f} 倍。\n"
                 "将依次执行人声分离、去混响、RVC 转换和混音，请耐心等待。"
             )
         )
@@ -337,13 +357,15 @@ class AICoverPlugin(Star):
                 audio_path,
                 original_name,
                 model,
-                transpose,
+                vocal_transpose,
+                instrumental_transpose,
                 vocal_gain,
                 instrumental_gain,
             )
             summary = (
-                f"AI 翻唱完成：{actual_model}，升降调 {transpose}，"
-                f"人声 {vocal_gain:.2f} 倍，伴奏 {instrumental_gain:.2f} 倍"
+                f"AI 翻唱完成：{actual_model}，人声变调 {vocal_transpose}，"
+                f"BGM 变调 {instrumental_transpose}，人声 {vocal_gain:.2f} 倍，"
+                f"背景音乐 {instrumental_gain:.2f} 倍"
             )
             if index:
                 summary += f"，索引 {index}"
@@ -375,7 +397,8 @@ class AICoverPlugin(Star):
         self,
         event: AstrMessageEvent,
         model: str = "",
-        transpose: int = 0,
+        vocal_transpose: int = 0,
+        instrumental_transpose: int = 0,
         vocal_gain: float = -1.0,
         instrumental_gain: float = -1.0,
     ):
@@ -383,7 +406,8 @@ class AICoverPlugin(Star):
         async for result in self._run_cover(
             event,
             model,
-            transpose,
+            vocal_transpose,
+            instrumental_transpose,
             vocal_gain,
             instrumental_gain,
             force_file=False,
@@ -395,7 +419,8 @@ class AICoverPlugin(Star):
         self,
         event: AstrMessageEvent,
         model: str = "",
-        transpose: int = 0,
+        vocal_transpose: int = 0,
+        instrumental_transpose: int = 0,
         vocal_gain: float = -1.0,
         instrumental_gain: float = -1.0,
     ):
@@ -403,7 +428,8 @@ class AICoverPlugin(Star):
         async for result in self._run_cover(
             event,
             model,
-            transpose,
+            vocal_transpose,
+            instrumental_transpose,
             vocal_gain,
             instrumental_gain,
             force_file=True,
