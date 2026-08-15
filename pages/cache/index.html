@@ -8,13 +8,13 @@
   </head>
   <body>
     <main class="panel">
-      <div>
+      <header>
         <p class="eyebrow">AI 翻唱</p>
         <h1>分离缓存</h1>
         <p class="description">
-          相同文件会复用已经生成的干人声和伴奏，跳过两次音轨分离。
+          按歌名查找已生成的干人声和伴奏，可单独或批量释放空间。
         </p>
-      </div>
+      </header>
       <section class="stats" aria-live="polite">
         <div class="stat">
           <span class="label">缓存音乐</span>
@@ -26,7 +26,33 @@
           <strong id="size">—</strong>
         </div>
       </section>
-      <div class="actions">
+
+      <section class="library" aria-labelledby="library-title">
+        <div class="library-heading">
+          <div>
+            <h2 id="library-title">缓存列表</h2>
+            <p id="result-count" class="result-count">—</p>
+          </div>
+          <label class="search">
+            <span class="sr-only">搜索歌曲</span>
+            <input id="search" type="search" placeholder="搜索歌名或文件名" autocomplete="off" />
+          </label>
+        </div>
+        <div class="bulk-actions">
+          <label class="select-all-label">
+            <input id="select-all" type="checkbox" />
+            <span>全选当前结果</span>
+          </label>
+          <span id="selected-count" class="selected-count">已选 0 首</span>
+          <button id="delete-selected" class="danger subtle" type="button" disabled>
+            清理所选
+          </button>
+        </div>
+        <div id="cache-list" class="cache-list" aria-live="polite"></div>
+        <p id="empty" class="empty" hidden>暂无缓存。</p>
+      </section>
+
+      <div class="actions footer-actions">
         <button id="refresh" class="secondary" type="button">刷新</button>
         <button id="clear" class="danger" type="button">清理全部缓存</button>
       </div>

@@ -17,6 +17,7 @@ from astrbot.api import AstrBotConfig
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import File, Plain, Record, Reply
 from astrbot.api.star import Context, Star, register
+from astrbot.api.web import request as web_request
 from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 
 DEFAULT_FORM_VALUES = {
@@ -73,7 +74,7 @@ class OriginalFormatRecord(Record):
     "astrbot_plugin_ai_cover",
     "tignioj",
     "调用局域网 RVC 服务完成分离、去混响、音色转换和混音",
-    "1.4.0",
+    "1.5.0",
 )
 class AICoverPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -99,16 +100,30 @@ class AICoverPlugin(Star):
             ["POST"],
             "Clear AI cover separation cache",
         )
+        context.register_web_api(
+            f"/{PLUGIN_NAME}/cache/delete",
+            self.page_delete_cache,
+            ["POST"],
+            "Delete selected AI cover separation cache entries",
+        )
 
     def _headers(self) -> dict[str, str]:
         return {"X-AI-Cover-Token": self.api_token} if self.api_token else {}
 
-    async def _service_json(self, path: str, method: str = "GET") -> dict:
+    async def _service_json(
+        self,
+        path: str,
+        method: str = "GET",
+        json_body: dict | None = None,
+    ) -> dict:
         timeout = aiohttp.ClientTimeout(total=30)
         async with (
             aiohttp.ClientSession(timeout=timeout, trust_env=True) as session,
             session.request(
-                method, f"{self.service_url}{path}", headers=self._headers()
+                method,
+                f"{self.service_url}{path}",
+                headers=self._headers(),
+                json=json_body,
             ) as response,
         ):
             payload = await response.text()
@@ -120,10 +135,9 @@ class AICoverPlugin(Star):
         return await self._service_json(path)
 
     async def page_cache_status(self):
-        """Expose service cache statistics to the plugin management page."""
+        """Expose service cache entries to the plugin management page."""
         try:
-            payload = await self._service_json("/cache")
-            return payload.get("cache", {})
+            return await self._service_json("/cache")
         except Exception as error:  # noqa: BLE001 - Web API boundary
             return {"status": "error", "message": str(error)}, 502
 
@@ -134,6 +148,26 @@ class AICoverPlugin(Star):
             return {
                 "removed": payload.get("removed", {}),
                 "cache": payload.get("cache", {}),
+            }
+        except Exception as error:  # noqa: BLE001 - Web API boundary
+            return {"status": "error", "message": str(error)}, 502
+
+    async def page_delete_cache(self):
+        """Delete selected service-side cache entries from the management page."""
+        try:
+            body = await web_request.json(default={})
+            ids = body.get("ids") if isinstance(body, dict) else None
+            if not isinstance(ids, list) or not ids:
+                return {"status": "error", "message": "请选择要清理的缓存。"}, 400
+            payload = await self._service_json(
+                "/cache/delete",
+                "POST",
+                {"ids": ids},
+            )
+            return {
+                "removed": payload.get("removed", {}),
+                "cache": payload.get("cache", {}),
+                "items": payload.get("items", []),
             }
         except Exception as error:  # noqa: BLE001 - Web API boundary
             return {"status": "error", "message": str(error)}, 502

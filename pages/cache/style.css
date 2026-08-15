@@ -33,7 +33,7 @@ body {
 }
 
 .panel {
-  width: min(680px, 100%);
+  width: min(980px, 100%);
   margin: 0 auto;
   padding: 28px;
   border: 1px solid var(--border);
@@ -52,6 +52,7 @@ body {
 }
 
 h1 { margin: 0; font-size: 28px; }
+h2 { margin: 0; font-size: 18px; }
 .description { margin: 10px 0 24px; color: var(--muted); line-height: 1.65; }
 
 .stats {
@@ -71,6 +72,69 @@ h1 { margin: 0; font-size: 28px; }
 .stat strong { font-size: 24px; }
 .unit { margin-left: 4px; color: var(--muted); }
 
+.library {
+  margin-top: 24px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.library-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.result-count { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+.search { width: min(320px, 48%); }
+.search input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  outline: none;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+.search input:focus { border-color: #5b84d7; box-shadow: 0 0 0 3px rgb(91 132 215 / 16%); }
+
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 18px;
+  background: var(--soft);
+  border-bottom: 1px solid var(--border);
+}
+.select-all-label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.selected-count { margin-left: auto; color: var(--muted); font-size: 13px; }
+
+.cache-list { display: grid; }
+.cache-row {
+  display: grid;
+  grid-template-columns: 24px minmax(180px, 1fr) minmax(190px, auto) auto;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.cache-row:last-child { border-bottom: 0; }
+.cache-row:hover { background: color-mix(in srgb, var(--soft) 62%, transparent); }
+.row-check { width: 17px; height: 17px; margin: 0; }
+.identity { min-width: 0; }
+.song-name { margin: 0; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.source-name { margin: 5px 0 0; overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.row-details { display: grid; justify-items: end; gap: 5px; color: var(--muted); font-size: 12px; }
+.cache-size { color: var(--text); font-size: 13px; font-weight: 650; }
+.empty { margin: 0; padding: 38px 20px; color: var(--muted); text-align: center; }
+
 .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 
 button {
@@ -88,12 +152,39 @@ button:disabled { cursor: wait; opacity: .55; }
 .secondary { border: 1px solid var(--border); background: var(--soft); color: var(--text); }
 .danger { background: var(--danger); }
 .danger:hover:not(:disabled) { background: var(--danger-hover); }
+.subtle { min-height: 34px; padding: 0 12px; }
+.row-delete {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 48%, var(--border));
+  background: transparent;
+  color: var(--danger);
+  font-size: 13px;
+}
+.row-delete:hover:not(:disabled) { background: var(--danger); color: #fff; }
 .message { min-height: 22px; margin: 14px 0 0; color: var(--muted); font-size: 13px; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
-@media (max-width: 520px) {
+@media (max-width: 680px) {
   body { padding: 14px; }
   .panel { padding: 20px; }
   .stats { grid-template-columns: 1fr; }
-  .actions { flex-direction: column-reverse; }
-  button { width: 100%; }
+  .library-heading { align-items: stretch; flex-direction: column; }
+  .search { width: 100%; }
+  .cache-row { grid-template-columns: 22px minmax(0, 1fr) auto; }
+  .row-details { grid-column: 2; justify-items: start; }
+  .row-delete { grid-column: 3; grid-row: 1 / span 2; }
+  .footer-actions { flex-direction: column-reverse; }
+  .footer-actions button { width: 100%; }
+  .bulk-actions { flex-wrap: wrap; }
 }
