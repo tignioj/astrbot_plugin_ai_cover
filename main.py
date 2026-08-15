@@ -6,6 +6,7 @@ import asyncio
 import base64
 import json
 import math
+import re
 import time
 import uuid
 from pathlib import Path
@@ -28,6 +29,22 @@ DEFAULT_INSTRUMENTAL_GAIN = 1.0
 DEFAULT_MODEL = "芙宁娜"
 MAX_GAIN = 2.0
 PLUGIN_NAME = "astrbot_plugin_ai_cover"
+INVALID_FILENAME_CHARS = re.compile(r'[\x00-\x1f<>:"/\\|?*]+')
+
+
+def _safe_filename_part(value: str, fallback: str) -> str:
+    """Return a platform-safe value for one part of an attachment filename."""
+    cleaned = INVALID_FILENAME_CHARS.sub("_", str(value or "")).strip(" .")
+    return cleaned or fallback
+
+
+def _cover_filename(model: str, original_name: str) -> str:
+    """Build an MP3 attachment name from the role and source filename."""
+    source_name = str(original_name or "").replace("\\", "/").rsplit("/", 1)[-1]
+    source_stem = Path(source_name).stem
+    role = _safe_filename_part(model, "未知角色")
+    source = _safe_filename_part(source_stem, "源音频")
+    return f"AI翻唱-{role}-{source}.mp3"
 
 
 class OriginalFormatRecord(Record):
@@ -56,7 +73,7 @@ class OriginalFormatRecord(Record):
     "astrbot_plugin_ai_cover",
     "tignioj",
     "调用局域网 RVC 服务完成分离、去混响、音色转换和混音",
-    "1.3.0",
+    "1.3.1",
 )
 class AICoverPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -340,7 +357,10 @@ class AICoverPlugin(Star):
             else:
                 chain = [
                     Plain(summary),
-                    File(name=f"AI翻唱-{actual_model}.mp3", file=str(output)),
+                    File(
+                        name=_cover_filename(actual_model, original_name),
+                        file=str(output),
+                    ),
                 ]
             yield event.chain_result(chain)
         except asyncio.TimeoutError:
